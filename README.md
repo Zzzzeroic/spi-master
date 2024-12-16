@@ -25,3 +25,5 @@ In this project, i_start signal is enabled by uart module.
 
 ## UART module
 This module receives UART signals from serial ports. And will inform the SPI module according to the state machine.
+
+test
