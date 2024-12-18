@@ -1,4 +1,4 @@
-`timescale 1ns / 1ps
+`timescale 1ns / 1ns
 //1000M clk
 ////////////////////////////////////////////////////////////////////////////////
 // Company: 
@@ -52,6 +52,7 @@ module jt201D_tb;
 		.i_uart_rx(i_uart_rx), 
 		.o_uart_tx(o_uart_tx), 
 		.o_ld_parity(o_ld_parity), 
+		.o_ld_debug(),
 		.o_SCLK(o_SCLK), 
 		.o_MOSI(o_MOSI), 
 		.i_MISO(i_MISO), 
