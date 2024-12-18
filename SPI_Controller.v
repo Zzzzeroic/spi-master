@@ -19,6 +19,7 @@
 //////////////////////////////////////////////////////////////////////////////////
 module SPI_Controller
 #(
+    parameter SPI_SCLK_DIV      = 4,
     parameter CPOL              = 1'b0,
     parameter CPHA              = 1'b0,
     parameter SPI_CLK_DIV       = 4,
@@ -37,17 +38,17 @@ module SPI_Controller
     output reg[SPI_DATA_WIDTH-1:0] o_read_data,     //data from jt201D, display for user
     output reg o_data_valid,          //able to receive data from cache pool
     //SPI
-    input i_MISO,
-    output reg o_SCLK,
-    output reg o_MOSI,
-    output reg o_SEN
+    input       i_MISO,
+    output      o_SCLK,
+    output reg  o_MOSI,
+    output reg  o_SEN
     //testSignal
     //output reg o_busy
     //output reg o_send_done
     );
 
-    parameter IDLE = 3'b000, START = 3'b001, SEND_ADDR = 3'b010, SEND_DATA = 3'b011, 
-                WAIT_READ = 3'b100, READ_DATA = 3'b101;
+    localparam IDLE = 3'b000, START = 3'b001, SEND_ADDR = 3'b010, SEND_DATA = 3'b011, 
+                WAIT_READ = 3'b100, READ_DATA = 3'b101, DONE = 3'b110;
 
     reg [2:0] spi_state;
     reg [4:0] bit_cnt;           // 位计数器，用于控制位发送与接收
@@ -62,57 +63,76 @@ module SPI_Controller
     assign get_number_edge      = (CPHA==1'b0)?SCLK_posedge:SCLK_negedge;
     assign switch_number_edge   = (CPHA==1'b0)?SCLK_negedge:SCLK_posedge;
 
+    //state switch
     always @(posedge i_clk_sys or negedge i_rst_n) begin
-        if(!i_rst_n) 
+        if(!i_rst_n) begin
             spi_state       <= IDLE;
             o_SEN           <= 1'b1;
+            en_SCLK         <= 1'b0;
+        end
         else begin
-            if(spi_state==IDLE && i_start == 1'b1) 
-                spi_state <= START;
-            else if(spi_state==WAIT_READ) 
+            case (spi_state) 
+            IDLE: begin
+                if(i_start==1'b1) begin
+                    spi_state   <= START;
+                    o_SEN       <= 1'b0;
+                    en_SCLK     <= 1'b1;
+                end
+            end
+            START: begin
+                if(get_number_edge) spi_state <= SEND_ADDR;
+            end
+            SEND_ADDR:
             begin
+                if(get_number_edge && bit_cnt == SPI_ADDR_WIDTH) 
+                    spi_state <= (i_rw==1'b1)?WAIT_READ:SEND_DATA;
+            end
+            WAIT_READ: begin
+                //when SCLK is IDLE(after switch edge), set SEN high
+                if(o_SEN==1'b0 && switch_number_edge) begin
+                    o_SEN       <= 1'b1;
+                    en_SCLK     <= 1'b0;
+                end
+
                 if(wait_cnt==SPI_CLK_DIV*SPI_WAIT_WIDTH-1) 
                 begin
                     spi_state   <= READ_DATA;
                     o_SEN       <= 1'b0;
+                    en_SCLK     <= 1'b1;
                 end
             end
-            else if(switch_number_edge) 
-            begin
-                case (spi_state) 
-                START: begin
-                    spi_state <= SEND_ADDR;
+            SEND_DATA:  begin
+                //state switch
+                if(get_number_edge && bit_cnt == SPI_ADDR_WIDTH+SPI_DATA_WIDTH) begin
+                    spi_state   <= DONE;
                 end
-                SEND_ADDR:
-                begin
-                    if(bit_cnt == SPI_ADDR_WIDTH) 
-                    begin
-                        if(i_rw==1'b1) begin//read
-                            spi_state   <= WAIT_READ;
-                            o_SEN       <= 1'b1;
-                        end
-                        else spi_state  <= SEND_DATA;
-                    end
-                end
-                SEND_DATA:  begin
-                    spi_state = (bit_cnt == SPI_ADDR_WIDTH+SPI_DATA_WIDTH)? IDLE:SEND_DATA;
-                end
-                READ_DATA:  begin
-                    spi_state = (bit_cnt == SPI_ADDR_WIDTH+SPI_DATA_WIDTH)? IDLE:READ_DATA;
-                end
-                default:    begin
-                    spi_state = IDLE;
-                end
-                endcase
             end
+            READ_DATA:  begin
+                //state switch
+                if(get_number_edge && bit_cnt == SPI_ADDR_WIDTH+SPI_DATA_WIDTH) begin
+                    spi_state   <= DONE;
+                end
+            end
+            DONE: begin
+                //state switch, make sure this state can exit when SCLK is done
+                if(switch_number_edge) begin
+                    o_SEN               <= 1'b1;
+                    en_SCLK             <= 1'b0;
+                    spi_state           <= IDLE;
+                end
+            end
+            default:    begin
+                spi_state <= IDLE;
+            end
+            endcase
         end
     end
 
+    //state output
     always @(posedge i_clk_sys or negedge i_rst_n) begin
         if(~i_rst_n) begin
             o_data_valid    <= 1'b0;
             o_MOSI          <= 1'b0;
-            en_SCLK         <= 1'b0;
             bit_cnt         <= 'd0;
             shift_reg       <= 'd0;
             addr_reg        <= 'd0;
@@ -125,7 +145,6 @@ module SPI_Controller
                 //o_busy        <= 1'b0;
                 o_data_valid    <= (i_start==1'b1)?1'b0:1'b1;
                 bit_cnt         <= 'd0;
-                en_SCLK         <= 1'b0;
             end
             START:
             begin
@@ -135,7 +154,6 @@ module SPI_Controller
                 o_data_valid    <= 1'b0;
                 bit_cnt         <= 'd0;
                 o_MOSI          <= i_rw;
-                en_SCLK         <= 1'b1;
             end
             SEND_ADDR:
             begin
@@ -156,14 +174,23 @@ module SPI_Controller
             WAIT_READ:  
             begin
                 wait_cnt    <= wait_cnt+1'b1;
+                bit_cnt     <= SPI_ADDR_WIDTH + 1'b1;
             end
             READ_DATA:
             begin
-                if(get_number_edge)begin
+                if(get_number_edge)
                     shift_reg <= {shift_reg[18:0], i_MISO};
+
+                if(switch_number_edge)
                     bit_cnt <= bit_cnt+1'b1;
-                end
             end
+            DONE:
+            begin
+                if(i_rw==1'b1) 
+                    o_read_data <= shift_reg;
+            end
+            default:
+                bit_cnt <= 'd0;
             endcase
         end
     end

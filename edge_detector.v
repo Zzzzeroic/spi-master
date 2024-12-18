@@ -6,24 +6,24 @@ module edge_detector
     input   i_chip_clk,
     input   i_rst_n,
     input   i_det,
-    output reg o_edge
+    output  o_edge
 );
-    reg[1:0] edge_shift_reg;
+    reg edge_last_time;
 
     always @(posedge i_chip_clk or negedge i_rst_n) begin
         if(~i_rst_n) begin
-            edge_shift_reg <= 2'b00;
+            edge_last_time <= 'd0;
         end
         else begin
-            edge_shift_reg <= {edge_shift_reg[0], i_det};
+            edge_last_time <= i_det;
         end
     end
 
     generate
         if(POSITIVE_EDGE == 1'b1)//detect posedge
-            o_edge <= (edge_shift_reg==2'b01)?1'b1:1'b0;
+            assign o_edge = ~edge_last_time&i_det;
         else 
-            o_edge <= (edge_shift_reg==2'b10)?1'b1:1'b0;
+            assign o_edge = edge_last_time&~i_det;
     endgenerate
 
 endmodule

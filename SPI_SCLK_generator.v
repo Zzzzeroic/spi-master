@@ -16,9 +16,10 @@ always @(posedge i_clk_sys or negedge i_rst_n) begin
     if(~i_rst_n) begin
         sclk_cnt <= 'd0;
     end
-    else begin
+    else if(en_SCLK) begin
         sclk_cnt <= (sclk_cnt < SPI_SCLK_DIV-1'b1) ? sclk_cnt + 1'b1 : 'd0;
     end
+    else sclk_cnt <= 'd0;
 end
 
 //SCLK output logic

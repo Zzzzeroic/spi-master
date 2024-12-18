@@ -45,12 +45,12 @@ module uart_state_ctrl
     //debug
     output reg[6:0] o_ld_debug
     );
-    parameter IDLE = 3'b000, REC_ADDR_HEAD = 3'b001, READ_ADDR=3'b010, 
+    localparam IDLE = 3'b000, REC_ADDR_HEAD = 3'b001, READ_ADDR=3'b010, 
                 REC_DATA_HEAD = 3'b011, READ_DATA = 3'b100, WRITE_DATA=3'b101, 
                 UART_TX=3'b110, DONE = 3'b111;
     
-    parameter WRITE_STR = "Write\n";
-    parameter READ_STR = "Read\n";
+    localparam WRITE_STR = "Write\n";
+    localparam READ_STR = "Read\n";
     reg[8*6-1:0] user_string;
 
     reg [2:0] state, next_state;
@@ -102,6 +102,7 @@ module uart_state_ctrl
             o_data_valid            <= 1'b0;
             user_string             <= 40'd0;
             o_ld_debug              <= 7'b111_1111;
+            shift_reg               <= 'd0;
         end else begin
             case(state)
             IDLE: begin
