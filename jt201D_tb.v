@@ -37,8 +37,6 @@ module jt201D_tb;
 	wire o_MOSI;
 	wire o_SEN;
 
-
-	parameter UART_CNT = 573;
 	integer uart_int= 0;
 	parameter testStr = "test";
 	parameter testStr2 = "{a:3CD:1aAfF}";
@@ -156,7 +154,7 @@ module jt201D_tb;
 			i_uart_rx = 1;	
 			#1146;
 		end
-		#50000
+		#200000
 
 		$stop;
 		
